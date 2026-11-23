@@ -111,3 +111,32 @@ class TestPhiGrid:
         # allow NaN->large sentinel at low chi
         vals = [-1e9 if v > 10 else v for v in vals]
         assert all(vals[i] >= vals[i + 1] - 0.5 for i in range(len(vals) - 1)), vals
+
+
+class TestWPHExtensions:
+    def test_mean_hydropathy_extremes(self):
+        from darkmatter.physics.calibration import _mean_hydropathy
+        assert _mean_hydropathy("I" * 10) == pytest.approx(4.5)
+        assert _mean_hydropathy("R" * 10) == pytest.approx(-4.5)
+
+    def test_unpack_versions(self):
+        import numpy as np
+        from darkmatter.physics.calibration import n_params, unpack
+        for v, n in (("v1", 10), ("v2", 14)):
+            theta, g, logK = unpack(np.arange(float(n)), v)
+            assert n_params(v) == n
+            assert logK == n - 1
+        import pytest as _pt
+        with _pt.raises(ValueError):
+            unpack(np.arange(9.0), "bogus")
+
+    def test_v2_chi_differs_from_v1(self):
+        import numpy as np
+        from darkmatter.physics.calibration import chi_of
+        seq = "KYFWPGAKYFWPGARKYFW"
+        from darkmatter.physics.calibration import _features_row, _mean_hydropathy
+        f = _features_row(seq, None, {})
+        d = {"features": f, "salt_mM": 150.0}
+        t1 = np.zeros(7); t2 = np.zeros(9); t2[7] = 1.0
+        assert chi_of(d, t2, "v2") != chi_of(d, t1, "v1")
+        assert "f_sticker" in f and "hydro" in f

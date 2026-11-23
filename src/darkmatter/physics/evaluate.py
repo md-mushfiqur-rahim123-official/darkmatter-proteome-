@@ -60,6 +60,7 @@ def _roc_auc(y: np.ndarray, s: np.ndarray) -> float:
 def run() -> dict:
     cal = json.load(open(os.path.join(PROCESSED, "calibration_result.json")))
     params = np.array(cal["final_fit"]["params"])
+    version = cal.get("model_version", "v1")
 
     data, _ = assemble_dataset()
     pred = np.array([condition_score(d, params) for d in data])
@@ -86,7 +87,7 @@ def run() -> dict:
             continue
         f = _features_row(seq, None, cache)
         d = {"features": f, "salt_mM": DEFAULT_SALT_MM}
-        scores.append(condition_score(d, params))
+        scores.append(condition_score(d, params, version))
         L = row["labels"]
         lab_d.append(bool(L["ppmc_driver_plus"]))
         lab_any.append(bool(L["ppmc_driver_plus"] or L["ppmc_client_plus"]))

@@ -36,6 +36,7 @@ PROCESSED = os.path.join(ROOT, "data", "processed")
 def main():
     cal = json.load(open(os.path.join(PROCESSED, "calibration_result.json")))
     params = np.array(cal["final_fit"]["params"])
+    version = cal.get("model_version", "v1")
 
     cache: dict[str, dict] = {}
     rows = []

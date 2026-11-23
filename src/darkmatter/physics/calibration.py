@@ -119,9 +119,27 @@ def _features_row(seq: str, salt_mM: float | None, cache: dict) -> dict:
             "kappa": st["kappa"],
             "scd": st["scd"],
             "f_arom": sum(seq.count(a) for a in "WFY") / n,
+            # WP-H1 extended descriptors
+            "hydro": _mean_hydropathy(seq),
+            "f_sticker": sum(seq.count(a) for a in "WYFR") / n,
+            "f_R": seq.count("R") / n,
+            "f_Y": seq.count("Y") / n,
+            "f_PG": sum(seq.count(a) for a in "PG") / n,
         }
         cache[seq] = f
     return f
+
+
+# Kyte-Doolittle scale (1982); mean hydropathy as sticker-chemistry covariate
+_KD = dict(A=1.8, R=-4.5, N=-3.5, D=-3.5, C=2.5, Q=-3.5, E=-3.5, G=-0.4,
+           H=-3.2, I=4.5, L=3.8, K=-3.9, M=1.9, F=2.8, P=-1.6, S=-0.8,
+           T=-0.7, W=-0.9, Y=-1.3, V=4.2)
+
+
+def _mean_hydropathy(seq: str) -> float:
+    if not seq:
+        return 0.0
+    return sum(_KD.get(a, 0.0) for a in seq) / len(seq)
 
 
 def assemble_dataset(grid: PhiGrid | None = None):
@@ -178,19 +196,37 @@ def assemble_dataset(grid: PhiGrid | None = None):
 
 # ---- model ------------------------------------------------------------------
 
-def chi_params_names() -> list[str]:
-    return ["th0", "th1_ncpr2", "th2_scdnorm", "th3_fcr", "th4_farom",
+def chi_params_names(version: str = "v1") -> list[str]:
+    base = ["th0", "th1_ncpr2", "th2_scdnorm", "th3_fcr", "th4_farom",
             "th5_kappa", "th6_salt"]
+    if version == "v2":
+        base += ["th7_hydro", "th8_fsticker"]
+    return base
 
 
-def model_vector(d: dict, theta, g, logK) -> np.ndarray:
-    """Predicted log10 csat (uM) per row, given theta (chi coeffs, len 7),
-    g (2, N_eff law), logK (scalar)."""
-    f, fm = d["features"], d["features"]["f_minus"]
-    logn = g[0] + g[1] * np.log10(d["features"]["length"])
+def chi_of(d: dict, theta, version: str = "v1") -> float:
+    f = d["features"]
     chi = (theta[0] + theta[1] * f["ncpr"] ** 2 + theta[2] * min(abs(f["scd"]) / 3.0, 2.0)
            + theta[3] * f["fcr"] + theta[4] * f["f_arom"] + theta[5] * f["kappa"]
            + theta[6] * f["f_minus"] * np.log10(1.0 + d["salt_mM"]))
+    if version == "v2":
+        # normalised: hydro/3.5 ~ [-1.3, 1.1]; f_sticker/0.12 ~ [0, ~2]
+        chi = chi + theta[7] * (f["hydro"] / 3.5) + theta[8] * (f["f_sticker"] / 0.12)
+    return chi
+
+
+def log_neff_of(d: dict, g, version: str = "v1") -> float:
+    ln = g[0] + g[1] * np.log10(d["features"]["length"])
+    if version == "v2":
+        # per-sequence blob length: stickers shrink blobs, PG spacers grow them
+        ln = ln + g[2] * (d["features"]["f_sticker"] / 0.12) + g[3] * (d["features"]["f_PG"] / 0.35)
+    return ln
+
+
+def model_vector(d: dict, theta, g, logK, version: str = "v1") -> np.ndarray:
+    """Predicted log10 csat (uM) per row."""
+    chi = chi_of(d, theta, version)
+    logn = log_neff_of(d, g, version)
     lphi = grid_log10_phi(chi, logn)
     return lphi - logK - logn  # log10 phi - log10(K*Neff)
 
@@ -211,61 +247,81 @@ def grid_log10_phi(chi: float | np.ndarray, log10_n: float | np.ndarray):
     return out
 
 
-def residuals(params, data, idx_train) -> np.ndarray:
-    theta = params[:7]
-    g = params[7:9]
-    logK = params[9]
+def n_params(version: str) -> int:
+    return {"v1": 10, "v2": 14}[version]
+
+
+def residual_elements(d: dict, pred: float, obs: float) -> float:
+    if d.get("is_point"):
+        return pred - obs            # squared point residual
+    if d["is_positive"]:             # csat_pred <= c
+        return max(0.0, pred - obs)
+    return max(0.0, obs - pred)      # csat_pred > c
+
+
+def residuals(params, data, idx_train, version: str = "v1") -> np.ndarray:
+    np_th = 9 if version == "v2" else 7
+    ng = 4 if version == "v2" else 2
+    theta, g, logK = params[:np_th], params[np_th:np_th + ng], params[-1]
     res = []
     for k in idx_train:
         d = data[k]
-        pred = model_vector(d, theta, g, logK)[0]
-        obs = np.log10(d["c_uvM"])
-        if d.get("is_point"):
-            res.append(pred - obs)  # squared point residual
-        elif d["is_positive"]:
-            # csat_pred must be <= c  => penalize pred > obs
-            res.append(max(0.0, pred - obs))
-        else:
-            # csat_pred must be > c  => penalize pred <= obs
-            res.append(max(0.0, obs - pred))
+        pred = float(model_vector(d, theta, g, logK, version)[0])
+        obs = float(np.log10(d["c_uvM"]))
+        res.append(residual_elements(d, pred, obs))
     return np.array(res)
 
 
-def fit(data, idx_train, x0=None):
+_V1_INIT = [3.0, -1.5, -0.4, 1.5, 0.5, 0.8, 0.0, 0.45, 0.2, -7.0]
+_V1_LO = [-10.0, -10.0, -5.0, -10.0, -3.0, -3.0, -2.0, 0.0, -0.9, -9.0]
+_V1_HI = [10.0, 10.0, 5.0, 10.0, 3.0, 3.0, 6.0, 1.5, 0.9, -5.0]
+_V2_INIT = [3.0, -1.5, -0.4, 1.5, 0.5, 0.8, 0.0, 0.0, 0.0,
+            0.45, 0.2, 0.0, 0.0, -7.0]
+_V2_LO = [-10.0, -10.0, -5.0, -10.0, -3.0, -3.0, -2.0, -6.0, -6.0,
+          0.0, -0.9, -4.0, -4.0, -9.0]
+_V2_HI = [10.0, 10.0, 5.0, 10.0, 3.0, 3.0, 6.0, 6.0, 6.0,
+          1.5, 0.9, 4.0, 4.0, -5.0]
+
+
+def fit(data, idx_train, version: str = "v1", x0=None):
+    init, lo, hi = {"v1": (_V1_INIT, _V1_LO, _V1_HI),
+                    "v2": (_V2_INIT, _V2_LO, _V2_HI)}[version]
     if x0 is None:
-        # physics-informed init: FUS-like IDP, K_bead from residue volume
-        x0 = np.array([3.0, -1.5, -0.4, 1.5, 0.5, 0.8, 0.0,  # theta (chi down w/ ncpr2)
-                       0.45, 0.2,                            # log10 Neff = g0+g1 log10 N
-                       -7.0])                                # log10 K_bead
-    lo = np.array([-10.0, -10.0, -5.0, -10.0, -3.0, -3.0, -2.0, 0.0, -0.9, -9.0])
-    hi = np.array([10.0, 10.0, 5.0, 10.0, 3.0, 3.0, 6.0, 1.5, 0.9, -5.0])
-    out = least_squares(residuals, x0, bounds=(lo, hi), args=(data, idx_train),
-                        xtol=1e-10, ftol=1e-10)
+        x0 = np.array(init)
+    out = least_squares(residuals, x0, bounds=(np.array(lo), np.array(hi)),
+                        args=(data, idx_train, version), xtol=1e-10, ftol=1e-10)
     return out
 
 
-def condition_score(d: dict, params: np.ndarray) -> float:
+def unpack(params, version: str):
+    if version not in ("v1", "v2"):
+        raise ValueError(f"unknown model version {version!r}")
+    np_th = 9 if version == "v2" else 7
+    ng = 4 if version == "v2" else 2
+    return params[:np_th], params[np_th:np_th + ng], params[-1]
+
+
+def condition_score(d: dict, params: np.ndarray, version: str = "v1") -> float:
     """Predicted log10 csat (uM) for one dataset row (dict with 'features'
     and 'salt_mM'). Larger = more concentrated needed = weaker driver."""
-    return float(model_vector(d, params[:7], params[7:9], params[9])[0])
+    theta, g, logK = unpack(params, version)
+    return float(model_vector(d, theta, g, logK, version)[0])
 
 
-def predict_log10_csat(data_index, params, data) -> float:
-    theta, g, logK = params[:7], params[7:9], params[9]
-    return float(model_vector(data[data_index], theta, g, logK)[0])
+def predict_log10_csat(data_index, params, data, version: str = "v1") -> float:
+    theta, g, logK = unpack(params, version)
+    return float(model_vector(data[data_index], theta, g, logK, version)[0])
 
 
 # ---- main -------------------------------------------------------------------
 
-def _rank_metrics(data, params, idx):
-    """Spearman rho of predicted log10 csat vs bracket upper bound (positives
-    only, where ranking is meaningful) and vs midpoints where both bounds exist."""
+def _rank_metrics(data, params, idx, version: str = "v1") -> dict:
+    """Spearman rho of predicted log10 csat vs the tested bound."""
     from scipy.stats import spearmanr
     preds, obs = [], []
     for k in idx:
-        d = data[k]
-        preds.append(predict_log10_csat(k, params, data))
-        obs.append(np.log10(d["c_uvM"]))
+        preds.append(predict_log10_csat(k, params, data, version))
+        obs.append(np.log10(data[k]["c_uvM"]))
     preds, obs = np.array(preds), np.array(obs)
     if len(preds) < 3:
         return {"spearman_rho": None, "n": len(preds)}
@@ -273,49 +329,79 @@ def _rank_metrics(data, params, idx):
     return {"spearman_rho": None if np.isnan(rho) else float(rho), "n": len(preds)}
 
 
-def main():
-    data, fold_of = assemble_dataset()
-    print(f"rows: {len(data)}")
-    n_folds = 5
-    folds = sorted({d["out_fold"] for d in data if d["out_fold"] != "unassigned"})
-    print("folds:", folds, "+ unassigned:", sum(1 for d in data if d["out_fold"] == "unassigned"))
-
-    results = {"n_rows": len(data), "folds": {}, "features_doc": {
-        "sigma_imputed_salt_mM": DEFAULT_SALT_MM,
-        "scd_norm": "min(|SCD|/3, 2)",
-        "chi_terms": chi_params_names(),
-        "N_eff_law": "log10 Neff = g0 + g1*log10(N)",
-        "csat_uM": "phi_dilute/(K_bead*Neff)",
-    }}
-
-    # 5-fold cluster-safe CV
+def crossvalidate(data, folds, version: str, verbose: bool = True) -> dict:
+    out_folds = {}
+    rhos = []
     for f in folds:
         tr = [k for k, d in enumerate(data) if d["out_fold"] != f]
         te = [k for k, d in enumerate(data) if d["out_fold"] == f]
-        out = fit(data, tr)
-        met_te = _rank_metrics(data, out.x, te)
-        met_tr = _rank_metrics(data, out.x, tr)
-        results["folds"][f] = {
-            "n_train": len(tr), "n_test": len(te),
-            "spearman_test": met_te, "spearman_train": met_tr,
-            "params": out.x.tolist(),
-            "cost": float(out.cost),
-        }
-        print(f"fold {f}: test rho={met_te['spearman_rho']} n={met_te['n']}")
+        out = fit(data, tr, version)
+        met_te = _rank_metrics(data, out.x, te, version)
+        out_folds[f] = {"n_train": len(tr), "n_test": len(te),
+                        "spearman_test": met_te["spearman_rho"],
+                        "n": met_te["n"], "params": out.x.tolist(),
+                        "cost": float(out.cost)}
+        rhos.append(met_te["spearman_rho"])
+        if verbose:
+            print(f"[{version}] fold {f}: test rho={met_te['spearman_rho']} "
+                  f"n={met_te['n']}")
+    good = [r for r in rhos if r is not None]
+    out_folds["mean_rho"] = float(np.mean(good)) if good else None
+    return out_folds
 
-    # final fit on all rows
-    all_idx = list(range(len(data)))
-    out = fit(data, all_idx)
-    theta = out.x[:7]
-    results["final_fit"] = {
-        "params": out.x.tolist(),
-        "theta": dict(zip(chi_params_names(), theta.tolist())),
-        "g": out.x[7:9].tolist(),
-        "log10_K_bead": float(out.x[9]),
-        "cost": float(out.cost),
-        "spearman_all": _rank_metrics(data, out.x, all_idx),
+
+def main():
+    data, _ = assemble_dataset()
+    print(f"rows: {len(data)}")
+    folds = sorted({d["out_fold"] for d in data if d["out_fold"] != "unassigned"})
+    print("folds:", folds, "+ unassigned:",
+          sum(1 for d in data if d["out_fold"] == "unassigned"))
+
+    results = {"n_rows": len(data), "features_doc": {
+        "sigma_imputed_salt_mM": DEFAULT_SALT_MM,
+        "scd_norm": "min(|SCD|/3, 2)",
+        "chi_terms": chi_params_names("v2"),
+        "N_eff_laws": {
+            "v1": "log10 Neff = g0 + g1*log10(N)",
+            "v2": "+ g2*(f_sticker/0.12) + g3*(f_PG/0.35)",
+        },
+        "csat_uM": "phi_dilute/(K_bead*Neff)",
+    }}
+
+    # model selection: cluster-safe 5-fold CV for each version
+    cv = {}
+    for version in ("v1", "v2"):
+        cv[version] = crossvalidate(data, folds, version)
+        print(f"[{version}] mean test rho = {cv[version]['mean_rho']}")
+    results["cv"] = {
+        v: {k: x for k, x in cv[v].items() if k != "params"}
+        for v in cv
     }
-    print(json.dumps(results["final_fit"], indent=2)[:1200])
+    # parsimony rule: keep the simpler v1 unless v2 gains >0.02 mean rho
+    m1, m2 = cv["v1"]["mean_rho"], cv["v2"]["mean_rho"]
+    best = "v2" if (m2 is not None and m1 is not None and m2 - m1 > 0.02) else "v1"
+    results["model_version"] = best
+    results["selection_rule"] = (
+        "prefer simpler v1 unless v2 improves mean CV rho by >0.02 "
+        f"(v1={m1}, v2={m2} -> {best})")
+    print("best model version:", best)
+
+    # final fit of BOTH versions on all rows (best is 'final_fit')
+    all_idx = list(range(len(data)))
+    for version in ("v1", "v2"):
+        out = fit(data, all_idx, version)
+        theta, g, logK = unpack(out.x, version)
+        entry = {
+            "params": out.x.tolist(),
+            "theta": dict(zip(chi_params_names(version), theta.tolist())),
+            "g": g.tolist(),
+            "log10_K_bead": float(logK),
+            "cost": float(out.cost),
+            "spearman_all": _rank_metrics(data, out.x, all_idx, version),
+        }
+        key = "final_fit" if version == best else f"final_fit_{version}"
+        results[key] = entry
+    print(json.dumps(results["final_fit"], indent=2)[:1500])
 
     os.makedirs(PROCESSED, exist_ok=True)
     with open(os.path.join(PROCESSED, "calibration_result.json"), "w") as fh:

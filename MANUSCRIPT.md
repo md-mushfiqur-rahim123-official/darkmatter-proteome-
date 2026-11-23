@@ -1,7 +1,7 @@
 # DarkMatter-Proteome: an interpretable, sequence-calibrated semi-empirical
 # Flory–Huggins model of LLPS saturation concentrations in IDPs
 
-_Draft manuscript (v0.1, WP-F2). Target: bioRxiv preprint, then a specialist
+_Draft manuscript (v0.2, WP-F2 + WP-H model selection). Target: bioRxiv preprint, then a specialist
 journal. This is NOT a Nature-submission claim; see Limitations._
 
 ## Abstract
@@ -139,7 +139,28 @@ mean shifts are 1e-3..1e-2 log10 units. **Honest reading**: the charge-only
 descriptor set is nearly blind to single point mutations; directional
 mutant effects need aromatic/sticker and local-context terms (future WP).
 
-### 4.4 Fitted parameters
+### 4.4 Model selection: descriptor extension (WP-H)
+
+We also fitted a 14-parameter variant (v2) adding mean hydropathy
+(Kyte–Doolittle) and a f_sticker=(W+Y+F+R)/N term to chi, plus
+sticker/spacer dependence of the N_eff law
+(g2·f_sticker/0.12 + g3·f_PG/0.35). Result:
+
+| model | params | mean CV rho (5 folds) | in-sample rho |
+|---|---|---|---|
+| v1 (reported) | 10 | 0.4745 | 0.521 |
+| v2 | 14 | 0.4756 | 0.554 |
+
+v2 fits the training rows better but gains nothing out-of-fold (+0.001);
+by the pre-registered parsimony rule (adopt v2 only if mean CV rho
+improves by > 0.02) **v1 is the reported model** and v2 is archived as a
+documented negative result: an explicit sticker term in chi does not add
+explanatory power on LLPSDB condition brackets. The likely reason is that
+LLPSDB condition rows are dominated by charge-driven polyelectrolytes and
+salt-response, with aromatic contributions suppressed by the coarse
+one-sided brackets.
+
+### 4.5 Fitted parameters
 
     theta = [2.566, -1.274 (ncpr^2), 0.037 (scd), 0.389 (fcr),
              0.571 (f_arom), -0.284 (kappa), -0.321 (salt)]
