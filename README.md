@@ -16,12 +16,18 @@ goal is **interpretable Csat ranking + calibratable phase boundaries**, not
 a black-box SOTA claim against DeePhase/FuzDrop/catGRANULE (those are
 baselines to compare against, not competitors to disparage).
 
-## Status (WP-B1/B3/D1 complete, WP-B2 pending)
+## Status (WP-B1/B3/D1/B2/E1/E2/D2/F1/F2/G complete)
 
 | Work package | Status |
 |---|---|
 | WP-B1 charge-statistics core (κ, SCD, NCPR, FCR, σ, δ, δ_max) | ✅ validated to machine precision vs `localcider` (171/171 sequences, max\|Δκ\| ≈ 1.2e-14) |
-| WP-B2 χ(seq) calibration on LLPSDB quantitative phase diagrams | ⏳ next |
+| WP-B2 χ(seq)/N_eff calibration (LLPSDB condition brackets) | ✅ 10-param fit, 5-fold cluster-safe CV ρ=0.30–0.70, mean ~0.5 |
+| WP-E1 evaluation harness | ✅ PPMC D+ ROC-AUC **0.756** vs baselines ≤0.646 |
+| WP-E2 baselines | ✅ FCR 0.646, \|NCPR\| 0.636, SCD 0.567, f_arom 0.514, κ 0.511 |
+| WP-D2 mutation-level validation | ✅ 25 mutations scored; honest negative (charge-only blind to point mutants) |
+| WP-F1 figures | ✅ `results/figures/` |
+| WP-F2 manuscript | ✅ draft: `MANUSCRIPT.md` |
+| WP-G MMseqs2 | ✅ attempted; binary unavailable in sandbox — documented gap, approximation kept |
 | WP-B3 Flory–Huggins binodal/spinodal solver | ✅ validated (analytical χ_c/φ_c, common-tangent verified, N=1 closed-form match) |
 | 4-source data ingest + leakage-controlled splits | ✅ 13,221 unique sequences, 11,304 clusters, 5 folds |
 | WP-D1 pathological mutation benchmark | ✅ 25 applied mutations (FUS×3, TDP-43×5 + 17 more) |
@@ -83,9 +89,14 @@ src/darkmatter/physics/flory_huggins.py  FH free energy, spinodal, χ_c, binodal
 src/darkmatter/data/ingest.py            4-source unified ingestion
 src/darkmatter/data/splits.py            homology-clustered 5-fold splits
 src/darkmatter/data/mutations.py         PhaSePro-disease mutation benchmark
+src/darkmatter/data/conditions.py        LLPSDB condition -> csat bracket pipeline
+src/darkmatter/physics/calibration.py    chi/N_eff bracket-loss fit + standalone runner
+src/darkmatter/physics/evaluate.py       eval harness + baseline ablations
+src/darkmatter/physics/mutation_eval.py  mutation-level csat response (WP-D2)
+scripts/make_figures.py                  publication figures -> results/figures/
 scripts/harvest.py                       idempotent provenance-controlled re-download
 scripts/verify_provenance.py             SHA-256 verification of raw snapshots
-tests/                                   17 pytest (charge parity + FH analytics)
+tests/                                   37 pytest (charge parity + FH analytics + parsers + grid)
 ```
 
 ## Design decisions worth knowing

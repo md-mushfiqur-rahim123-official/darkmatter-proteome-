@@ -5,10 +5,9 @@ data/raw/*
 !data/raw/PROVENANCE.md
 !data/raw/.gitkeep
 
-# processed bulk tables are rebuildable from raw; keep small JSON only if
-# needed for review - unified table is ~10MB+, exclude it but keep splits'
-# index. (records hold full sequences; reviewers rebuild with one command)
+# bulk rebuildable tables stay out of git (rebuild with one command, see README)
 data/processed/unified_raw_sources.json
+data/processed/splits.json
 
 # python
 __pycache__/
@@ -16,4 +15,3 @@ __pycache__/
 .venv/
 *.egg-info/
 .pytest_cache/
-data/processed/splits.json

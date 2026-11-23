@@ -41,3 +41,26 @@ All nine snapshot files are digest-verified by `scripts/verify_provenance.py`
 2. Any sequence used in training/evaluation must be traceable to a row here.
 3. Re-verification: `python scripts/verify_provenance.py` (recomputes SHA-256
    against this ledger; exits non-zero on any drift).
+
+## WP-B2 quantitative path (2025-11 session)
+
+- LLPSDB "phase diagram" zips ship 446 JPG images + condition tables. JPGs
+  are NOT digitised; the quantitative path is the CONDITION-LEVEL inequality
+  data (see `src/darkmatter/data/conditions.py`).
+- Bracket semantics: single-protein positive row at c => csat <= c;
+  single-protein negative row at c => csat > c. Output:
+  `data/processed/llpsdb_conditions.json`
+  (3,485 condition rows -> 1,111 constructs -> 1,039 csat-bounded;
+  275 constructs aggregate-inconsistent across salt — kept, salt is an
+  explicit covariate in the chi model).
+- Units: longest-first unit tokenisation (µM is a single unit token —
+  regression-tested); mass/volume -> µM via 110 Da/residue
+  (AA_MASS_DA, documented approximation); salt -> mono-valent mM
+  equivalence (documented caveat); RT -> 25 °C.
+- PhaSePro free-text explicit csat sentences parsed by phrase requirement
+  ("saturation concentration"/"csat") + asserted-number check; currently
+  yields 1 high-precision point (FUS).
+- Calibration output: `data/processed/calibration_result.json`
+  (10 params; cluster-safe 5-fold CV; see MANUSCRIPT.md for numbers).
+- Evaluation output: `data/processed/evaluation.json`;
+  mutation validation: `data/processed/mutation_validation.json`.

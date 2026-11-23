@@ -1,0 +1,69 @@
+{
+  "csat_ranking_model": {
+    "fold_0": {
+      "rho": 0.7031761588261715,
+      "n": 621
+    },
+    "fold_1": {
+      "rho": 0.48882550987583795,
+      "n": 508
+    },
+    "fold_2": {
+      "rho": 0.42058543516238295,
+      "n": 503
+    },
+    "fold_3": {
+      "rho": 0.29816814094124844,
+      "n": 790
+    },
+    "fold_4": {
+      "rho": 0.5691055397295783,
+      "n": 749
+    },
+    "all": {
+      "rho": 0.5206203300366221,
+      "n": 3171
+    }
+  },
+  "csat_ranking_descriptors": {
+    "ncpr": {
+      "rho": -0.11447211287197469
+    },
+    "fcr": {
+      "rho": -0.1879274783345747
+    },
+    "f_arom": {
+      "rho": 0.045741058274730635
+    },
+    "kappa": {
+      "rho": -0.07038747486182095
+    },
+    "scd": {
+      "rho": 0.09111842486614526
+    },
+    "length": {
+      "rho": -0.49098855188369034
+    }
+  },
+  "ppmc_classification_model": {
+    "n": 2863,
+    "n_drivers_D_plus": 77,
+    "n_any_LLPS": 94,
+    "auc_D_plus_vs_rest": 0.7563489991702482,
+    "auc_any_LLPS_vs_rest": 0.7503342477121321
+  },
+  "baselines_ppmc_D_plus": {
+    "abs_ncpr": 0.6360886062967901,
+    "fcr": 0.6459640503071946,
+    "f_arom": 0.5140614948583362,
+    "kappa": 0.5113764555616673,
+    "scd_abs": 0.5667320834226792,
+    "length_shorter": 0.24523358909575707,
+    "random_expected": 0.5
+  },
+  "notes": [
+    "Model score = predicted log10 csat (uM) from WP-B2c fit (data/processed/calibration_result.json), salt imputed 150.0 mM for PPMC.",
+    "AUC orientation: score = -log10 csat (lower csat = more likely driver).",
+    "Csat ranking is bound-based (positive rows give only an upper bound)."
+  ]
+}
