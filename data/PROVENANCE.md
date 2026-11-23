@@ -24,10 +24,18 @@ All nine snapshot files are digest-verified by `scripts/verify_provenance.py`
   `src/darkmatter/data/ingest.py::load_llpsdb` for the handling; Ambiguous
   zips store sequences as ';'-joined FASTA lines and Lack a Sequence column
   in LLPS.xls (joined from protein.xls via protID↔PID).
-- **MMseqs2**: not available in the current sandbox; splits use the
-  documented 3-mer-composition kNN approximation
-  (`darkmatter.data.splits`). Swap to MMseqs2 `easy-cluster` (30% identity)
-  before publication; `splits.json` schema is clustering-agnostic.
+- **MMseqs2 (RESOLVED 2025-11)**: MMseqs2 v20-ae60e static Linux binary
+  (sse41 build) downloaded from the official GitHub release
+  (`data/raw/mmseqs2_20-ae60e_linux_sse41.tar.gz`,
+  sha256 f6ab59defde7d65ea7d55dd33aed167ada87cdae8b6b85fd4ba2dc6f00aa7775,
+  via urllib since curl is sandbox-blocked). Folds rebuilt from
+  `easy-linclust` clusters (min-seq-id 0.3, -c 0.85, cov-mode 5 =
+  shorter-sequence coverage so fragments cannot straddle folds):
+  13,221 sequences -> 7,954 clusters, largest 67, balanced 2644/2645 per
+  fold. Old kNN approximation archived as `splits_knn_approx.json`.
+  Effect on results: mean CV rho 0.475 -> 0.444 (harder, stricter split:
+  more distant homologs share folds), fold range tightens [0.30,0.70] ->
+  [0.34,0.58].
 - **DisProt**: not yet harvested; used later only as an IDR mask/filter.
 - LLPSDB citation: exact NAR-Database article to be confirmed when writing the
   manuscript bibliography (site lists the paper; DOI to be verified — no

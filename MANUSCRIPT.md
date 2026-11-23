@@ -1,7 +1,7 @@
 # DarkMatter-Proteome: an interpretable, sequence-calibrated semi-empirical
 # Flory–Huggins model of LLPS saturation concentrations in IDPs
 
-_Draft manuscript (v0.3, WP-F2 + WP-H model selection + WP-I uncertainty). Target: bioRxiv preprint, then a specialist
+_Draft manuscript (v0.4: MMseqs2 fold upgrade applied). Target: bioRxiv preprint, then a specialist
 journal. This is NOT a Nature-submission claim; see Limitations._
 
 ## Abstract
@@ -17,9 +17,9 @@ explicit length law. We calibrate the model on condition-level inequality
 data mined from LLPSDB v2.0 (positives bound csat from above, negatives from
 below) plus explicit csat sentences from PhaSePro, using a bracket loss that
 respects the one-sided nature of the evidence. With cluster-safe
-cross-validation (sequence-similarity grouped folds), the model ranks held-out
-csat bounds at Spearman rho = 0.30–0.70 (mean ~0.5 over 5 folds; 3,171
-condition rows) and classifies PPMC driver (D+) proteins vs the remainder at
+cross-validation (MMseqs2 linclust clusters at 30% identity, fragment-safe
+short-sequence coverage 0.85), the model ranks held-out csat bounds at
+Spearman rho = 0.34–0.58 (mean 0.444 over 5 folds; 3,171 condition rows) and classifies PPMC driver (D+) proteins vs the remainder at
 ROC-AUC = 0.756 (2,863 proteins), exceeding every single-descriptor baseline
 (best: FCR, AUC = 0.646). Fitted parameters are few (10) and physically
 interpretable: the calibrated N_eff law is nearly length-independent
@@ -99,16 +99,25 @@ initialisation, and box bounds.
 
 ## 4. Results
 
-### 4.1 Csat ranking (held-out, cluster-safe folds)
+### 4.1 Csat ranking (held-out, MMseqs2 cluster-safe folds)
+
+Folds group MMseqs2 linclust clusters (v20-ae60e, min-seq-id 0.3, coverage
+0.85 in cov-mode 5 = shorter-sequence coverage, so fragments cannot straddle
+folds): 13,221 sequences -> 7,954 clusters.
 
 | fold | n | Spearman rho (model) |
 |---|---|---|
-| 0 | 621 | 0.703 |
-| 1 | 508 | 0.489 |
-| 2 | 503 | 0.421 |
-| 3 | 790 | 0.298 |
-| 4 | 749 | 0.569 |
+| 0 | 571 | 0.575 |
+| 1 | 719 | 0.489 |
+| 2 | 567 | 0.345 |
+| 3 | 579 | 0.427 |
+| 4 | 735 | 0.383 |
 | all (in-sample) | 3,171 | 0.521 |
+
+vs the superseded 3-mer kNN approximation (11,304 clusters): mean CV rho
+0.444 vs 0.475, but the fold range TIGHTENS from [0.30, 0.70] to
+[0.34, 0.58] — MMseqs2 merges more distant homologs into the same cluster,
+making the harder, leakage-stricter evaluation the reported one.
 
 Single-descriptor ceilings on the same data: length −0.49, FCR −0.19,
 NCPR −0.11, SCD +0.09, kappa −0.07, f_arom +0.05. The multivariate chi model
@@ -148,8 +157,8 @@ sticker/spacer dependence of the N_eff law
 
 | model | params | mean CV rho (5 folds) | in-sample rho |
 |---|---|---|---|
-| v1 (reported) | 10 | 0.4745 | 0.521 |
-| v2 | 14 | 0.4756 | 0.554 |
+| v1 (reported) | 10 | 0.4438 | 0.521 |
+| v2 | 14 | 0.4469 | 0.554 |
 
 v2 fits the training rows better but gains nothing out-of-fold (+0.001);
 by the pre-registered parsimony rule (adopt v2 only if mean CV rho
@@ -198,9 +207,11 @@ noisier: 150/9,284 scaffolds vs PPMC's consensus D+ definition).
    a per-sequence N_eff is the natural next work package.
 4. Charge descriptors do not encode aromatic stickers explicitly beyond
    f_arom; mutation-level response is correspondingly weak (4.3).
-5. MMseqs2 was unavailable in this environment; folds use a documented
-   approximation (single-linkage on cosine kNN of 3-mer composition,
-   threshold 0.90, k=25).
+5. (RESOLVED) MMseqs2 was initially unavailable; the earlier folds used a
+   documented kNN approximation. The reported evaluation now uses real
+   MMseqs2 linclust clusters (v20-ae60e static binary, SHA-256-tracked);
+   the approximation is archived at `data/processed/splits_knn_approx.json`
+   for comparison.
 6. Mass-to-molar conversion assumes 110 Da/residue; mono-valent salt
    equivalence ignores ion identity.
 

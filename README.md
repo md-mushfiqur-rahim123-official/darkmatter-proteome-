@@ -21,15 +21,15 @@ baselines to compare against, not competitors to disparage).
 | Work package | Status |
 |---|---|
 | WP-B1 charge-statistics core (κ, SCD, NCPR, FCR, σ, δ, δ_max) | ✅ validated to machine precision vs `localcider` (171/171 sequences, max\|Δκ\| ≈ 1.2e-14) |
-| WP-B2 χ(seq)/N_eff calibration (LLPSDB condition brackets) | ✅ 10-param fit, 5-fold cluster-safe CV ρ=0.30–0.70, mean ~0.5 |
+| WP-B2 χ(seq)/N_eff calibration (LLPSDB condition brackets) | ✅ 10-param fit, 5-fold MMseqs2 cluster-safe CV ρ=0.34–0.58 (mean 0.444) |
 | WP-E1 evaluation harness | ✅ PPMC D+ ROC-AUC **0.756** vs baselines ≤0.646 |
 | WP-E2 baselines | ✅ FCR 0.646, \|NCPR\| 0.636, SCD 0.567, f_arom 0.514, κ 0.511 |
 | WP-D2 mutation-level validation | ✅ 25 mutations scored; honest negative (charge-only blind to point mutants) |
 | WP-F1 figures | ✅ `results/figures/` |
 | WP-F2 manuscript | ✅ draft: `MANUSCRIPT.md` |
-| WP-G MMseqs2 | ✅ attempted; binary unavailable in sandbox — documented gap, approximation kept |
+| WP-G MMseqs2 | ✅ **resolved**: v20-ae60e static binary (SHA-256-tracked); folds from real MMseqs2 linclust (0.3 id, cov-mode 5) — 7,954 clusters |
 | WP-B3 Flory–Huggins binodal/spinodal solver | ✅ validated (analytical χ_c/φ_c, common-tangent verified, N=1 closed-form match) |
-| 4-source data ingest + leakage-controlled splits | ✅ 13,221 unique sequences, 11,304 clusters, 5 folds |
+| 4-source data ingest + leakage-controlled splits | ✅ 13,221 unique sequences; MMseqs2 linclust: 7,954 clusters, 5 folds |
 | WP-D1 pathological mutation benchmark | ✅ 25 applied mutations (FUS×3, TDP-43×5 + 17 more) |
 
 ## Quickstart
