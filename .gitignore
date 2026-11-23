@@ -1,0 +1,19 @@
+# Raw snapshots are immutable and re-downloadable via scripts/harvest.py;
+# only digests + provenance metadata are tracked.
+data/raw/*
+!data/raw/DIGESTS.txt
+!data/raw/PROVENANCE.md
+!data/raw/.gitkeep
+
+# processed bulk tables are rebuildable from raw; keep small JSON only if
+# needed for review - unified table is ~10MB+, exclude it but keep splits'
+# index. (records hold full sequences; reviewers rebuild with one command)
+data/processed/unified_raw_sources.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+data/processed/splits.json
