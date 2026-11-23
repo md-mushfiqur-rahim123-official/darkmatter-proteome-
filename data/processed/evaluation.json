@@ -61,6 +61,47 @@
     "length_shorter": 0.24523358909575707,
     "random_expected": 0.5
   },
+  "bootstrap_uncertainty": {
+    "csat_ranking_pooled_rho": {
+      "point": 0.5206203300366221,
+      "ci95": [
+        0.4949100827212265,
+        0.5462173336452538
+      ],
+      "n_boot": 1000,
+      "note": "bootstrap within folds (cluster-safe resampling)"
+    },
+    "ppmc_auc_D_plus": {
+      "point": 0.7563489991702482,
+      "ci95": [
+        0.7190935615063787,
+        0.7917479657432224
+      ],
+      "n_boot": 1000
+    },
+    "ppmc_auc_any_LLPS": {
+      "point": 0.7503342477121321,
+      "ci95": [
+        0.7144739261770299,
+        0.7869459443580563
+      ],
+      "n_boot": 1000
+    }
+  },
+  "drllps_task": {
+    "n_scored": 9278,
+    "n_unparseable": 3,
+    "n_scaffold": 150,
+    "auc_scaffold_vs_rest": 0.5895650744960561,
+    "bootstrap_ci_auc": {
+      "point": 0.5895650744960561,
+      "ci95": [
+        0.5483802204791408,
+        0.629188141684785
+      ],
+      "n_boot": 1000
+    }
+  },
   "notes": [
     "Model score = predicted log10 csat (uM) from WP-B2c fit (data/processed/calibration_result.json), salt imputed 150.0 mM for PPMC.",
     "AUC orientation: score = -log10 csat (lower csat = more likely driver).",

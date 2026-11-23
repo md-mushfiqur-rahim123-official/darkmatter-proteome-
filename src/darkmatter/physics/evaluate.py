@@ -19,7 +19,7 @@ import os
 import numpy as np
 from scipy.stats import spearmanr
 
-from darkmatter.data.ingest import load_ppmc
+from darkmatter.data.ingest import load_drllps, load_ppmc
 from darkmatter.physics.calibration import (
     DEFAULT_SALT_MM,
     _features_row,
@@ -132,11 +132,19 @@ def run() -> dict:
         r = spearmanr(v, obs).statistic
         base_rank[key] = {"rho": None if np.isnan(r) else float(r)}
 
+    # ---- WP-I: bootstrap CIs + DrLLPS task ----
+    boot = bootstrap_cis(data, params, cal.get("model_version", "v1"),
+                         ppmc_tab_scores=(scores, lab_d, lab_any.astype(int)),
+                         n_boot=1000)
+    dll = drllps_task(params, cal.get("model_version", "v1"))
+
     out = {
         "csat_ranking_model": ranking,
         "csat_ranking_descriptors": base_rank,
         "ppmc_classification_model": ppmc_eval,
         "baselines_ppmc_D_plus": baselines_d,
+        "bootstrap_uncertainty": boot,
+        "drllps_task": dll,
         "notes": [
             "Model score = predicted log10 csat (uM) from WP-B2c fit "
             "(data/processed/calibration_result.json), salt imputed "
@@ -151,8 +159,103 @@ def run() -> dict:
     return out
 
 
+
+
+# ---- WP-I: uncertainty quantification + DrLLPS task --------------------------
+
+def _bootstrap_ci(rows_scores: np.ndarray, rows_labels: np.ndarray,
+                  n_boot: int = 1000, seed: int = 20250101) -> dict:
+    """Percentile bootstrap CI for an AUC-ish statistic; rows are i.i.d.-assumed
+    ONLY for CI presentation (training never resamples)."""
+    rng = np.random.default_rng(seed)
+    n = len(rows_scores)
+    stats = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        a = _roc_auc(rows_labels[idx], rows_scores[idx])
+        if not np.isnan(a):
+            stats.append(a)
+    lo, hi = np.percentile(stats, [2.5, 97.5])
+    return {"point": float(_roc_auc(rows_labels, rows_scores)),
+            "ci95":[float(lo), float(hi)], "n_boot": n_boot}
+
+
+def bootstrap_cis(data, params, version, ppmc_tab_scores: tuple | None = None,
+                  n_boot: int = 1000) -> dict:
+    """Bootstrap CIs: (a) pooled CV Spearman rho (resample rows within folds),
+    (b) PPMC AUCs."""
+    from scipy.stats import spearmanr
+    rng = np.random.default_rng(20250101)
+    # pooled per-fold predictions: fold-level pairing pred/obs
+    preds, obs, folds = [], [], []
+    for d_i, d in enumerate(data):
+        preds.append(condition_score(d, params, version))
+        obs.append(np.log10(d["c_uvM"]))
+        folds.append(d["out_fold"])
+    preds, obs, folds = map(np.array, (preds, obs, folds))
+    r_boot = []
+    folds_u = np.unique(folds)
+    for _ in range(n_boot):
+        ps, os_ = [], []
+        for f in folds_u:
+            idx = np.where(folds == f)[0]
+            sel = idx[rng.integers(0, len(idx), len(idx))]
+            ps.append(preds[sel]); os_.append(obs[sel])
+        r = spearmanr(np.concatenate(ps), np.concatenate(os_)).statistic
+        if not np.isnan(r):
+            r_boot.append(r)
+    rho_lo, rho_hi = np.percentile(r_boot, [2.5, 97.5])
+    out = {
+        "csat_ranking_pooled_rho": {
+            "point": float(spearmanr(preds, obs).statistic),
+            "ci95": [float(rho_lo), float(rho_hi)], "n_boot": n_boot,
+            "note": "bootstrap within folds (cluster-safe resampling)",
+        }
+    }
+    if ppmc_tab_scores is not None:
+        scores, lab_d, lab_any = ppmc_tab_scores
+        idx = rng.integers(0, len(scores), (n_boot, len(scores)))
+        a1 = [_roc_auc(lab_d[i], scores[i]) for i in idx]
+        a2 = [_roc_auc(lab_any[i], scores[i]) for i in idx]
+        a1 = [a for a in a1 if not np.isnan(a)]
+        a2 = [a for a in a2 if not np.isnan(a)]
+        # convention: score_driver = -log10 csat (lower csat = more likely driver)
+        out["ppmc_auc_D_plus"] = _bootstrap_ci(-scores, lab_d, n_boot)
+        out["ppmc_auc_any_LLPS"] = _bootstrap_ci(-scores, lab_any, n_boot)
+    return out
+
+
+def drllps_task(params, version) -> dict:
+    """DrLLPS: Scaffold (droplet-forming drivers) vs Client/Regulator."""
+    cache: dict[str, dict] = {}
+    scores, y_sc = [], []
+    n_bad = 0
+    for rec in load_drllps():
+        seq = rec["sequence"]
+        try:
+            f = _features_row(seq, None, cache)
+        except Exception:
+            n_bad += 1
+            continue
+        d = {"features": f, "salt_mM": DEFAULT_SALT_MM}
+        scores.append(condition_score(d, params, version))
+        y_sc.append(1 if rec["labels"]["drllps_type"] == "Scaffold" else 0)
+    scores = np.array(scores, dtype=float)
+    y_sc = np.array(y_sc, dtype=int)
+    return {
+        "n_scored": len(scores),
+        "n_unparseable": n_bad,
+        "n_scaffold": int(y_sc.sum()),
+        "auc_scaffold_vs_rest": _roc_auc(y_sc, -scores),
+        # convention: -log10 csat favors scaffold (droplet-forming) proteins
+        "bootstrap_ci_auc": _bootstrap_ci(-scores, y_sc, 1000),
+    }
+
+
 if __name__ == "__main__":
     res = run()
     print(json.dumps(res["ppmc_classification_model"], indent=2))
     print("baselines:", json.dumps(res["baselines_ppmc_D_plus"], indent=2))
     print("ranking model:", json.dumps(res["csat_ranking_model"], indent=2))
+    print("bootstrap:", json.dumps(res.get("bootstrap_uncertainty", {}), indent=2))
+    print("drllps:", json.dumps(res.get("drllps_task", {}), indent=2))

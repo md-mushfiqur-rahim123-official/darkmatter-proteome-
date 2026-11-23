@@ -1,7 +1,7 @@
 # DarkMatter-Proteome: an interpretable, sequence-calibrated semi-empirical
 # Flory–Huggins model of LLPS saturation concentrations in IDPs
 
-_Draft manuscript (v0.2, WP-F2 + WP-H model selection). Target: bioRxiv preprint, then a specialist
+_Draft manuscript (v0.3, WP-F2 + WP-H model selection + WP-I uncertainty). Target: bioRxiv preprint, then a specialist
 journal. This is NOT a Nature-submission claim; see Limitations._
 
 ## Abstract
@@ -171,6 +171,23 @@ Negative salt coefficient: more salt raises the salt term in chi's opposite
 direction... (sign conventions documented in `calibration.py`; the model's
 salt term is monotone in log10(1+salt) with fitted magnitude 0.32 per decade
 weighted by f_minus.)
+
+### 4.6 Uncertainty quantification (WP-I)
+
+Percentile bootstrap (1,000 resamples; csat-ranking resampled *within* folds
+so cluster structure is preserved):
+
+| metric | point | 95% CI |
+|---|---|---|
+| pooled csat-ranking rho | 0.521 | [0.495, 0.546] |
+| PPMC D+ AUC | 0.756 | [0.719, 0.792] |
+| DrLLPS scaffold-vs-rest AUC (n=9,278; 150 scaffolds) | 0.590 | [0.548, 0.629] |
+
+The DrLLPS scaffold task is a third, fully external label set (the model saw
+only LLPSDB brackets + 1 PhaSePro point): scaffold proteins — droplet-forming
+drivers — receive lower predicted csat than clients/regulators at AUC 0.59,
+consistent with but weaker than the PPMC result (DrLLPS type annotation is
+noisier: 150/9,284 scaffolds vs PPMC's consensus D+ definition).
 
 ## 5. Limitations (explicit)
 

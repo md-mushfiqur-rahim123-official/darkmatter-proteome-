@@ -64,3 +64,7 @@ All nine snapshot files are digest-verified by `scripts/verify_provenance.py`
   (10 params; cluster-safe 5-fold CV; see MANUSCRIPT.md for numbers).
 - Evaluation output: `data/processed/evaluation.json`;
   mutation validation: `data/processed/mutation_validation.json`.
+- WP-I uncertainty addendum: bootstrap CIs (1000 resamples, seed 20250101)
+  appended to `data/processed/evaluation.json`
+  (csat ranking within-fold resampling; DrLLPS scaffold AUC 0.590
+  [0.548, 0.629] on 9,278 proteins — third external label set).
